@@ -2,6 +2,25 @@ const { ApolloServer } = require('@apollo/server')
 const { startStandaloneServer } = require('@apollo/server/standalone')
 const { v1: uuid } = require('uuid')
 
+const mongoose = require('mongoose')
+mongoose.set('strictQuery', false)
+const Book = require('./models/book')
+const Author = require('./models/author')
+require('dotenv').config()
+
+const MONGODB_URI = process.env.MONGODB_URI
+
+console.log('connecting to', MONGODB_URI)
+
+mongoose.connect(MONGODB_URI)
+  .then(() => {
+    console.log('connected to MongoDB')
+  })
+  .catch((error) => {
+    console.log('error connection to MongoDB:', error.message)
+  })
+
+
 let authors = [
   {
     name: 'Robert Martin',
@@ -102,7 +121,7 @@ const typeDefs = `
   type Book {
     title: String!
     published: Int!
-    author: String!
+    author: Author!
     id: ID!
     genres: [String!]!
   }
@@ -127,7 +146,7 @@ const typeDefs = `
       author: String!
       published: Int!
       genres: [String!]!
-    ):Book
+    ):Book!
     editAuthor(
       name: String!
       setBornTo: Int!
@@ -137,50 +156,79 @@ const typeDefs = `
 
 const resolvers = {
   Query: {
-    bookCount: () => books.length,
-    authorCount: () => authors.length,
-    allBooks: (root, args) => {
-        if( !args.author && !args.genre){
-            return books
-        }
-        if( !args.genre ){
-            return books.filter(b => b.author === args.author)
-        }
-        if (!args.author ){
-            return books.filter(b => b.genres.includes(args.genre))
-        }
-        return books.filter(b => b.author === args.author && b.genres.includes(args.genre))
-    },
-    allAuthors: () => authors
+    bookCount: async () => Book.collection.countDocuments(),
+    authorCount: async () => Author.collection.countDocuments(),
+    // allBooks: (root, args) => {
+    //     if( !args.author && !args.genre){
+    //         return books
+    //     }
+    //     if( !args.genre ){
+    //         return books.filter(b => b.author === args.author)
+    //     }
+    //     if (!args.author ){
+    //         return books.filter(b => b.genres.includes(args.genre))
+    //     }
+    //     return books.filter(b => b.author === args.author && b.genres.includes(args.genre))
+    // },
+    allBooks: async () => Book.find({}),
+    allAuthors: async () => Author.find({})
   },
-  Author: {
-    bookCount: (root) => {
-        return books.filter(b => b.author === root.name).length
-    }
-  },
+  // Author: {
+  //   bookCount: (root) => {
+  //       return books.filter(b => b.author === root.name).length
+  //   }
+  // },
   Mutation: {
-    addBook: (root, args) => {
-        const book = { ...args, id: uuid() }
-        books = books.concat(book)
-
-        const author = authors.find(a => a.name === args.author)
+    addBook: async (root, args) => {
+        // const book = { ...args, id: uuid() }
+        const author = await Author.findOne({name: args.author})
         if(!author){
-            const newAuthor = {name: args.author, id: uuid()}
-            authors = authors.concat(newAuthor)
+          const newAuthor = new Author({name: args.author})
+          await newAuthor.save()
+          const book = new Book({
+            title: args.title,
+            published: args.published,
+            author: newAuthor,
+            genres: args.genres
+          })
+          await book.save()
+          return book
+        }
+        else{
+          const book = new Book({
+            title: args.title,
+            published: args.published,
+            author: author,
+            genres: args.genres
+          })
+          await book.save()
+          return book
         }
 
-        return book
+
+        // const book = new Book({...args})
+        // // books = books.concat(book)
+        // await book.save()
+
+        // // const author = authors.find(a => a.name === args.author)
+        // // if(!author){
+        // //     const newAuthor = {name: args.author, id: uuid()}
+        // //     authors = authors.concat(newAuthor)
+        // // }
+
+
+        // return book
     },
-    editAuthor: (root, args) => {
-        const author = authors.find(a => a.name === args.name)
-        if(!author){
-            return null
-        }
+    // editAuthor: (root, args) => {
+    //     const author = authors.find(a => a.name === args.name)
+    //     if(!author){
+    //         return null
+    //     }
 
-        const updatedAuthor = {...author, born: args.setBornTo}
-        authors = authors.map(a => a.name === args.name ? updatedAuthor : a)
-        return updatedAuthor
-    }
+    //     const updatedAuthor = {...author, born: args.setBornTo}
+    //     authors = authors.map(a => a.name === args.name ? updatedAuthor : a)
+    //     return updatedAuthor
+    // }
   }
 }
 
