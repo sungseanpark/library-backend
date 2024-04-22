@@ -170,7 +170,19 @@ const resolvers = {
     //     }
     //     return books.filter(b => b.author === args.author && b.genres.includes(args.genre))
     // },
-    allBooks: async () => Book.find({}),
+    allBooks: async (root, args) => {
+      if (!args.author && !args.genre) {
+        return Book.find({});
+      }
+      if (!args.author) {
+        return Book.find({ genres: { $in: [args.genre] } });
+      }
+      const author = await Author.findOne({ name: args.author})
+      if (!args.genre) {
+        return Book.find({ author: author });
+      }
+      return Book.find({ author: author, genres: { $in: [args.genre] } });
+    },
     allAuthors: async () => Author.find({})
   },
   // Author: {
@@ -229,6 +241,12 @@ const resolvers = {
     //     authors = authors.map(a => a.name === args.name ? updatedAuthor : a)
     //     return updatedAuthor
     // }
+    editAuthor: async (root, args) => {
+      const author = await Author.findOne({name: args.name})
+      author.born = args.setBornTo
+      await author.save()
+      return author
+    }
   }
 }
 
