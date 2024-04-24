@@ -1,6 +1,6 @@
 const { ApolloServer } = require('@apollo/server')
 const { startStandaloneServer } = require('@apollo/server/standalone')
-const { v1: uuid } = require('uuid')
+const { GraphQLError } = require('graphql')
 
 const mongoose = require('mongoose')
 mongoose.set('strictQuery', false)
@@ -193,17 +193,47 @@ const resolvers = {
   Mutation: {
     addBook: async (root, args) => {
         // const book = { ...args, id: uuid() }
+        // if(args.author.length < 4) {
+        //   throw new GraphQLError('Saving author failed', {
+        //     extensions: {
+        //       code: 'BAD_USER_INPUT',
+        //       invalidArgs: args.author
+        //     }
+        //   })
+        // }
         const author = await Author.findOne({name: args.author})
         if(!author){
           const newAuthor = new Author({name: args.author})
-          await newAuthor.save()
+          try{
+            await newAuthor.save()
+          }
+          catch(error) {
+            throw new GraphQLError('Saving author failed', {
+              extensions: {
+                code: 'BAD_USER_INPUT',
+                invalidArgs: args.author,
+                error
+              }
+            })
+          }
           const book = new Book({
             title: args.title,
             published: args.published,
             author: newAuthor,
             genres: args.genres
           })
-          await book.save()
+          try{
+            await book.save()
+          }catch(error) {
+            throw new GraphQLError('Saving book failed', {
+              extensions: {
+                code: 'BAD_USER_INPUT',
+                invalidArgs: args.title,
+                error
+              }
+            })
+          }
+          
           return book
         }
         else{
@@ -213,7 +243,17 @@ const resolvers = {
             author: author,
             genres: args.genres
           })
-          await book.save()
+          try{
+            await book.save()
+          }catch(error) {
+            throw new GraphQLError('Saving book failed', {
+              extensions: {
+                code: 'BAD_USER_INPUT',
+                invalidArgs: args.title,
+                error
+              }
+            })
+          }
           return book
         }
 
@@ -244,7 +284,17 @@ const resolvers = {
     editAuthor: async (root, args) => {
       const author = await Author.findOne({name: args.name})
       author.born = args.setBornTo
-      await author.save()
+      try {
+        await author.save()
+      } catch (error) {
+        throw new GraphQLError('Editing author failed', {
+          extensions: {
+            code: 'BAD_USER_INPUT',
+            invalidArgs: args.name,
+            error
+          }
+        })
+      }
       return author
     }
   }
