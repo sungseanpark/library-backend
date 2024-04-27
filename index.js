@@ -193,27 +193,28 @@ const resolvers = {
     // },
     allBooks: async (root, args) => {
       if (!args.author && !args.genre) {
-        return Book.find({});
+        return Book.find({}).populate('author');
       }
       if (!args.author) {
-        return Book.find({ genres: { $in: [args.genre] } });
+        return Book.find({ genres: { $in: [args.genre] } }).populate('author');
       }
       const author = await Author.findOne({ name: args.author})
       if (!args.genre) {
-        return Book.find({ author: author });
+        return Book.find({ author: author }).populate('author');
       }
-      return Book.find({ author: author, genres: { $in: [args.genre] } });
+      return Book.find({ author: author, genres: { $in: [args.genre] } }).populate('author');
     },
     allAuthors: async () => Author.find({}),
     me: (root, args, context) => {
       return context.currentUser
     }
   },
-  // Author: {
-  //   bookCount: (root) => {
-  //       return books.filter(b => b.author === root.name).length
-  //   }
-  // },
+  Author: {
+    bookCount: async (root) => {
+        // return books.filter(b => b.author === root.name).length
+        return Book.countDocuments({ author: root._id })
+    }
+  },
   Mutation: {
     addBook: async (root, args, context) => {
       const currentUser = context.currentUser
