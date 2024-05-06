@@ -23,88 +23,68 @@ const resolvers = {
         }
         return Book.find({ author: author, genres: { $in: [args.genre] } }).populate('author');
       },
-      allAuthors: async () => Author.find({}),
+      allAuthors: async () => {
+        console.log('author.find')
+        return Author.find({})
+      },
       me: (root, args, context) => {
         return context.currentUser
       }
     },
-    Author: {
-      bookCount: async (root) => {
-          return Book.countDocuments({ author: root._id })
-      }
-    },
     Mutation: {
       addBook: async (root, args, context) => {
-        const currentUser = context.currentUser
+        const currentUser = context.currentUser;
   
         if (!currentUser) {
           throw new GraphQLError('not authenticated', {
             extensions: {
               code: 'BAD_USER_INPUT',
             }
-          })
+          });
         }
   
-          const author = await Author.findOne({name: args.author})
-          if(!author){
-            const newAuthor = new Author({name: args.author})
-            try{
-              await newAuthor.save()
+        let author = await Author.findOne({ name: args.author });
+        if (!author) {
+          // If the author doesn't exist, create a new one
+          author = new Author({ name: args.author, bookCount: 1 });
+        } else {
+          // If the author exists, increment their bookCount
+          author.bookCount++;
+        }
+  
+        const book = new Book({
+          title: args.title,
+          published: args.published,
+          author: author,
+          genres: args.genres
+        });
+  
+        // Start a session to ensure atomicity of the operations
+        const session = await mongoose.startSession();
+        session.startTransaction();
+  
+        try {
+          await author.save({ session }); // Save the updated author
+          await book.save({ session }); // Save the new book
+  
+          await session.commitTransaction(); // Commit the transaction
+          session.endSession(); // End the session
+        } catch (error) {
+          await session.abortTransaction(); // Rollback the transaction
+          session.endSession(); // End the session
+  
+          throw new GraphQLError('Saving book failed', {
+            extensions: {
+              code: 'BAD_USER_INPUT',
+              invalidArgs: args.title,
+              error
             }
-            catch(error) {
-              throw new GraphQLError('Saving author failed', {
-                extensions: {
-                  code: 'BAD_USER_INPUT',
-                  invalidArgs: args.author,
-                  error
-                }
-              })
-            }
-            const book = new Book({
-              title: args.title,
-              published: args.published,
-              author: newAuthor,
-              genres: args.genres
-            })
-            try{
-              await book.save()
-            }catch(error) {
-              throw new GraphQLError('Saving book failed', {
-                extensions: {
-                  code: 'BAD_USER_INPUT',
-                  invalidArgs: args.title,
-                  error
-                }
-              })
-            }
-
-            pubsub.publish('BOOK_ADDED', { bookAdded: book })
-            
-            return book
-          }
-          else{
-            const book = new Book({
-              title: args.title,
-              published: args.published,
-              author: author,
-              genres: args.genres
-            })
-            try{
-              await book.save()
-            }catch(error) {
-              throw new GraphQLError('Saving book failed', {
-                extensions: {
-                  code: 'BAD_USER_INPUT',
-                  invalidArgs: args.title,
-                  error
-                }
-              })
-            }
-
-            pubsub.publish('BOOK_ADDED', { bookAdded: book })
-
-            return book
-          }
+          });
+        }
+  
+        pubsub.publish('BOOK_ADDED', { bookAdded: book });
+  
+        return book;
       },
       editAuthor: async (root, args, context) => {
         const currentUser = context.currentUser
